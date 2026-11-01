@@ -1,0 +1,18 @@
+# Volcados de tarjetas y claves: nunca entran en la imagen
+MifareHack/
+data/
+**/*.mfd
+**/*.dmp
+**/*.dmp_bak*
+**/key*.txt
+**/keys*.txt
+
+# Python
+**/__pycache__/
+**/*.pyc
+.venv/
+
+# Entorno y sistema
+.git/
+.env
+**/.DS_Store

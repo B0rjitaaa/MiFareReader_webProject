@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MiFare Reader</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js"></script>
+  <script defer src="vendor/alpine.min.js"></script>
+</head>
+<body x-data="mifareApp()" x-init="connect()">
+  <main>
+    <header>
+      <h1>MiFare Reader</h1>
+      <p class="reader" aria-live="polite">
+        <span class="dot" :class="status.reader ? 'on' : 'off'" aria-hidden="true"></span>
+        <span x-text="status.reader || (connected ? 'Lector no conectado' : 'Conectando con el servidor…')"></span>
+      </p>
+    </header>
+
+    <section class="panel">
+      <div class="card-info" aria-live="polite">
+        <template x-if="status.card">
+          <div>
+            <p class="label" x-text="status.card.type"></p>
+            <p class="uid" x-text="status.card.uid || 'UID no disponible'"></p>
+          </div>
+        </template>
+        <template x-if="!status.card">
+          <div>
+            <p class="label">Sin tarjeta</p>
+            <p class="hint">Acerca una tarjeta al lector y déjala quieta.</p>
+          </div>
+        </template>
+        <button type="button" @click="read()" :disabled="!status.card || reading"
+                x-text="reading ? 'Leyendo…' : 'Leer tarjeta'"></button>
+      </div>
+
+      <details>
+        <summary>Claves adicionales</summary>
+        <label for="keys">Una por línea, 12 caracteres hexadecimales. Se prueban antes que las de fábrica y no se guardan.</label>
+        <textarea id="keys" rows="3" spellcheck="false" autocomplete="off" x-model="keysText"></textarea>
+      </details>
+
+      <p class="error" role="alert" x-show="error" x-text="error"></p>
+    </section>
+
+    <template x-if="result">
+      <section>
+        <div class="summary">
+          <h2 x-text="`${readableSectors()} de ${result.sectors.length} sectores leídos`"></h2>
+          <p class="hint">
+            <span x-text="`UID ${result.uid}`"></span>.
+            En los bloques trailer, la clave A siempre aparece como ceros porque la tarjeta no la revela.
+          </p>
+        </div>
+        <div class="sectors">
+          <template x-for="sector in result.sectors" :key="sector.sector">
+            <article class="sector" :class="{ locked: !sector.key }">
+              <h3>
+                <span x-text="`Sector ${sector.sector}`"></span>
+                <small x-text="sector.key ? `Clave ${sector.key_type} · ${sector.key}` : 'Sin acceso'"></small>
+              </h3>
+              <template x-if="sector.key">
+                <ol>
+                  <template x-for="block in sector.blocks" :key="block.block">
+                    <li :class="block.kind">
+                      <span class="block-number" x-text="block.block"></span>
+                      <code x-text="block.data || 'No se puede leer'"></code>
+                      <span class="ascii" x-text="toAscii(block.data)"></span>
+                      <span class="kind" x-text="kindLabels[block.kind]"></span>
+                    </li>
+                  </template>
+                </ol>
+              </template>
+            </article>
+          </template>
+        </div>
+      </section>
+    </template>
+  </main>
+</body>
+</html>

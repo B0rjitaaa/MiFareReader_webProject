@@ -1,0 +1,25 @@
+services:
+  pcscd:
+    build: .
+    command: pcscd --foreground
+    restart: unless-stopped
+    device_cgroup_rules:
+      - "c 189:* rmw"          # dispositivos USB, sin usar --privileged
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+      - /run/udev:/run/udev:ro # detecta si se desconecta y reconecta el lector
+      - pcsc-socket:/run/pcscd
+
+  app:
+    build: .
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8122
+    restart: unless-stopped
+    depends_on: [pcscd]
+    ports:
+      - "127.0.0.1:8122:8122"  # solo accesible desde el propio Mint
+    volumes:
+      - pcsc-socket:/run/pcscd
+      - ./data:/data           # volcados, fuera de la imagen
+
+volumes:
+  pcsc-socket:

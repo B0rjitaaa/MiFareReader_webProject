@@ -1,0 +1,17 @@
+# Volcados de tarjetas y claves: nunca se suben
+MifareHack/
+data/
+*.mfd
+*.dmp
+*.dmp_bak*
+key*.txt
+keys*.txt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Entorno y sistema
+.env
+.DS_Store
