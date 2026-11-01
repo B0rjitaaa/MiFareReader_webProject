@@ -79,7 +79,7 @@
             <button type="submit" :disabled="!destination || !cardName.trim() || saving"
                     x-text="saving ? 'Guardando…' : 'Guardar'"></button>
           </div>
-          <p class="hint">El archivo incluye las claves que han funcionado en cada sector.</p>
+          <p class="hint">El archivo incluye las claves que han funcionado en cada sector. Al guardar en el Mint se guarda también el volcado <code>.dump</code> junto al JSON.</p>
           <p class="error" role="alert" x-show="saveError" x-text="saveError"></p>
           <p class="saved-ok" role="status" x-show="saveMessage" x-text="saveMessage"></p>
         </form>
@@ -124,7 +124,8 @@
             <div class="actions" x-show="editingId !== card.id">
               <button type="button" class="secondary" @click="startRename(card)">Renombrar</button>
               <button type="button" class="secondary" @click="view(card)">Ver</button>
-              <button type="button" class="secondary" @click="downloadSaved(card)">Descargar</button>
+              <button type="button" class="secondary" @click="downloadSaved(card)">Descargar JSON</button>
+              <button type="button" class="secondary" @click="downloadDump(card)">Descargar .dump</button>
             </div>
             <div class="actions" x-show="editingId === card.id">
               <button type="button" class="secondary" @click="confirmRename(card)">Guardar</button>

@@ -31,6 +31,24 @@ def name_taken(name: str, exclude_id: str | None = None) -> bool:
     return False
 
 
+def raw_dump(card: dict) -> bytes:
+    """Volcado raw byte a byte: cada bloque en su offset fijo, bloques no leidos a ceros."""
+    blocks = {}
+    max_block = -1
+    for sector in card.get("sectors", []):
+        for block in sector.get("blocks", []):
+            number = block["block"]
+            max_block = max(max_block, number)
+            data = block.get("data")
+            if data:
+                blocks[number] = bytes.fromhex(data.replace(" ", ""))
+    out = bytearray()
+    for number in range(max_block + 1):
+        chunk = blocks.get(number, b"\x00" * 16)
+        out += (chunk + b"\x00" * 16)[:16]
+    return bytes(out)
+
+
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:40]
 
@@ -65,6 +83,9 @@ def save_card(name: str, reading: dict) -> dict:
     with os.fdopen(descriptor, "w") as file:
         json.dump(card, file, indent=2, ensure_ascii=False)
     os.replace(temporary, path)
+    dump_descriptor = os.open(CARDS_DIR / f"{card_id}.bin", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(dump_descriptor, "wb") as dump_file:
+        dump_file.write(raw_dump(card))
     return _summary(card_id, card)
 
 

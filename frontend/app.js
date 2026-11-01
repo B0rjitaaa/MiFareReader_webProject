@@ -142,6 +142,22 @@ function mifareApp() {
       }
     },
 
+    async downloadDump(card) {
+      this.error = "";
+      try {
+        const response = await fetch(`/api/cards/${card.id}/dump`);
+        if (!response.ok) throw new Error("No se pudo generar el .dump");
+        const url = URL.createObjectURL(await response.blob());
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${card.name.replace(/[^\p{L}\p{N}_-]+/gu, "_")}.bin`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } catch (error) {
+        this.error = error.message;
+      }
+    },
+
     async downloadSaved(card) {
       this.error = "";
       try {

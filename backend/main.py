@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StringConstraints
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -122,6 +122,18 @@ def get_card(card_id: str) -> dict:
     if card is None:
         raise HTTPException(status_code=404, detail="Tarjeta no encontrada")
     return card
+
+
+@app.get("/api/cards/{card_id}/dump")
+def get_card_dump(card_id: str) -> Response:
+    card = storage.load_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail="Tarjeta no encontrada")
+    return Response(
+        content=storage.raw_dump(card),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{card_id}.bin"'},
+    )
 
 
 @app.patch("/api/cards/{card_id}")
