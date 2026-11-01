@@ -95,7 +95,8 @@ async def read_card(request: ReadRequest) -> dict:
     except reader.CardError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     last_reading = {**reading, "read_at": datetime.now(timezone.utc).isoformat()}
-    return last_reading
+    dump_file = await asyncio.to_thread(storage.save_read_dump, last_reading)
+    return {**last_reading, "dump_file": dump_file}
 
 
 @app.get("/api/cards")

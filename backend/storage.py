@@ -7,6 +7,7 @@ from pathlib import Path
 
 CARDS_DIR = Path("/data/cards")
 BACKUPS_DIR = Path("/data/backups")
+READS_DIR = Path("/data/reads")
 CARD_ID = re.compile(r"^[A-Za-z0-9-]+$")
 
 
@@ -154,3 +155,20 @@ def save_backup(uid: str | None, card_type: str, blocks: list[dict]) -> str:
     with os.fdopen(descriptor, "w") as file:
         json.dump(payload, file, indent=2, ensure_ascii=False)
     return f"/data/backups/{name}"
+
+
+def save_read_dump(reading: dict) -> str:
+    """Archiva automaticamente el volcado .dump de cada lectura en /data/reads."""
+    READS_DIR.mkdir(mode=0o700, exist_ok=True)
+    uid_slug = (reading.get("uid") or "sin-uid").replace(" ", "")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    name = f"{timestamp}-{uid_slug}.bin"
+    counter = 1
+    while (READS_DIR / name).exists():
+        name = f"{timestamp}-{uid_slug}-{counter}.bin"
+        counter += 1
+    path = READS_DIR / name
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as file:
+        file.write(raw_dump(reading))
+    return f"/data/reads/{name}"
