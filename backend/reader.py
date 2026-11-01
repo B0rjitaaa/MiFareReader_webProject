@@ -212,6 +212,33 @@ def plan_frames(mode: str, payload: str, start_block: int, card_type: str) -> li
     return list(zip(targets, chunks))
 
 
+def plan_card_frames(source: dict, target_type: str) -> list[tuple[int, list[int]]]:
+    """Calcula los bloques de datos a escribir a partir de una tarjeta guardada. No toca el hardware.
+
+    Se copian solo los bloques de datos legibles del origen a los mismos numeros de bloque
+    del destino, sin tocar nunca el bloque 0 ni los trailer. Los bloques que el origen no
+    pudo leer no se sobreescriben.
+    """
+    allowed = set(writable_blocks(target_type))
+    if not allowed:
+        raise CardError(f"Tipo de tarjeta no compatible para escritura: {target_type}")
+    frames: list[tuple[int, list[int]]] = []
+    for sector in source.get("sectors", []):
+        for block in sector.get("blocks", []):
+            number = block.get("block")
+            data = block.get("data")
+            # Solo bloques de datos legibles del origen que existan como datos en el destino
+            if number not in allowed or block.get("kind") != "data" or not data:
+                continue
+            tokens = data.replace(" ", "")
+            if len(tokens) != 32:
+                continue
+            frames.append((number, [int(tokens[i:i + 2], 16) for i in range(0, 32, 2)]))
+    if not frames:
+        raise CardError("Esa copia no tiene bloques de datos legibles para escribir.")
+    return frames
+
+
 def _write_block(connection, block: int, data: list[int]) -> bool:
     _, sw1, sw2 = connection.transmit([0xFF, 0xD6, 0x00, block, 0x10] + data)
     return (sw1, sw2) == SW_OK

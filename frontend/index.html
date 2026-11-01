@@ -21,7 +21,7 @@
     <nav class="tabs">
       <button type="button" :class="{ active: tab === 'reader' }" @click="tab = 'reader'">Lector</button>
       <button type="button" :class="{ active: tab === 'compare' }" @click="tab = 'compare'">Comparar</button>
-      <button type="button" :class="{ active: tab === 'write' }" @click="tab = 'write'">Escribir</button>
+      <button type="button" :class="{ active: tab === 'write' }" @click="openWrite()">Escribir</button>
     </nav>
 
     <div x-show="tab === 'reader'">
@@ -225,17 +225,46 @@
 
         <fieldset class="write-mode">
           <legend class="visually-hidden">Tipo de contenido</legend>
-          <label><input type="radio" name="writeMode" value="text" x-model="writeMode" @change="writePlan = null"> Texto</label>
-          <label><input type="radio" name="writeMode" value="hex" x-model="writeMode" @change="writePlan = null"> Bytes (hex)</label>
+
+
+          <label><input type="radio" name="writeMode" value="text" x-model="writeMode" @change="writePlan = null; writeResults = null"> Texto</label>
+          <label><input type="radio" name="writeMode" value="hex" x-model="writeMode" @change="writePlan = null; writeResults = null"> Bytes (hex)</label>
+          <label><input type="radio" name="writeMode" value="card" x-model="writeMode" @change="writePlan = null; writeResults = null"> Desde copia guardada</label>
         </fieldset>
 
         <div class="write-fields">
-          <label class="field">
-            <span x-text="writeMode === 'text' ? 'Texto (se divide en bloques de 16 bytes)' : 'Un bloque: 16 bytes en hexadecimal (32 digitos)'"></span>
-            <textarea x-show="writeMode === 'text'" rows="3" x-model="writeText" @input="writePlan = null"></textarea>
-            <input x-show="writeMode === 'hex'" type="text" class="hex-input" maxlength="47" placeholder="00 11 22 ... (16 bytes)" x-model="writeHex" @input="writePlan = null">
-          </label>
-          <label class="field start">
+
+
+
+
+
+
+          <template x-if="writeMode === 'card'">
+            <label class="field">
+              <span>Copia guardada en el Mint</span>
+              <select x-model="writeCardId" @change="writePlan = null; writeResults = null">
+                <option value="">— elige una tarjeta guardada —</option>
+                <template x-for="card in savedCards" :key="card.id">
+                  <option :value="card.id" x-text="`${card.name} · ${card.uid} · ${card.type}`"></option>
+                </template>
+              </select>
+              <small class="hint" x-show="!savedCards.length">Guarda alguna tarjeta en el Mint desde el Lector para poder escribir su contenido aquí.</small>
+              <small class="hint" x-show="writeCardId">Se escribirán los bloques de datos legibles de esa copia en los mismos números de bloque. El bloque 0 y los trailer (UID y claves) no se tocan; los bloques que la copia no pudo leer se dejan como están.</small>
+            </label>
+          </template>
+          <template x-if="writeMode === 'text'">
+            <label class="field">
+              <span>Texto (se divide en bloques de 16 bytes)</span>
+              <textarea rows="3" x-model="writeText" @input="writePlan = null"></textarea>
+            </label>
+          </template>
+          <template x-if="writeMode === 'hex'">
+            <label class="field">
+              <span>Un bloque: 16 bytes en hexadecimal (32 digitos)</span>
+              <input type="text" class="hex-input" maxlength="47" placeholder="00 11 22 ... (16 bytes)" x-model="writeHex" @input="writePlan = null">
+            </label>
+          </template>
+          <label class="field start" x-show="writeMode !== 'card'">
             <span>Bloque inicial</span>
             <input type="number" min="1" max="255" x-model.number="writeStart" @input="writePlan = null">
           </label>
@@ -256,6 +285,10 @@
       <template x-if="writePlan">
         <section class="panel">
           <h2>Se va a escribir esto</h2>
+          <p class="warn" x-show="writeTypeInfo && writeTypeInfo.mismatch">
+            Ojo: la copia es <strong x-text="writeTypeInfo.sourceType"></strong> pero la tarjeta en el lector es
+            <strong x-text="writeTypeInfo.type"></strong>. Solo se escribirán los bloques que existan como datos en ambas.
+          </p>
           <ol class="write-preview">
             <template x-for="row in writePlan" :key="row.block">
               <li>

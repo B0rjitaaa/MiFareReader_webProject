@@ -37,10 +37,11 @@ class RenameRequest(BaseModel):
 
 
 class WriteRequest(BaseModel):
-    mode: Literal["text", "hex"]
+    mode: Literal["text", "hex", "card"]
     text: str = Field(default="", max_length=4096)
     hex: str = Field(default="", max_length=64)
-    start_block: int = Field(ge=1, le=255)
+    card_id: str | None = None
+    start_block: int = Field(default=1, ge=1, le=255)
     keys: list[HexKey] = Field(default=[], max_length=16)
     dry_run: bool = True
 
@@ -161,24 +162,47 @@ async def write_card(request: WriteRequest) -> dict:
     card = status.get("card")
     if not card or not card.get("type"):
         raise HTTPException(status_code=409, detail="No hay ninguna tarjeta en el lector")
-    payload = request.text if request.mode == "text" else request.hex
-    if not payload.strip():
-        raise HTTPException(status_code=422, detail="Escribe algun contenido")
-    try:
-        frames = reader.plan_frames(request.mode, payload, request.start_block, card["type"])
-    except reader.CardError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
+    source_type: str | None = None
+    if request.mode == "card":
+        source = storage.load_card(request.card_id) if request.card_id else None
+        if source is None:
+            raise HTTPException(status_code=404, detail="No se ha encontrado esa copia guardada")
+        source_type = source.get("type")
+        try:
+            frames = reader.plan_card_frames(source, card["type"])
+        except reader.CardError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
+    else:
+        payload = request.text if request.mode == "text" else request.hex
+        if not payload.strip():
+            raise HTTPException(status_code=422, detail="Escribe algun contenido")
+        try:
+            frames = reader.plan_frames(request.mode, payload, request.start_block, card["type"])
+        except reader.CardError as error:
+            raise HTTPException(status_code=409, detail=str(error)) from error
     plan = [
         {"block": block, "data": reader.to_hex(data), "ascii": reader.to_ascii(data)}
         for block, data in frames
     ]
     if request.dry_run:
-        return {"type": card["type"], "dry_run": True, "plan": plan}
+        return {
+            "type": card["type"],
+            "source_type": source_type,
+            "type_mismatch": bool(source_type and source_type != card["type"]),
+            "dry_run": True,
+            "plan": plan,
+        }
     try:
         result = await asyncio.to_thread(reader.write_blocks, frames, request.keys)
     except reader.CardError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
-    return {"dry_run": False, "plan": plan, **result}
+    return {
+        "dry_run": False,
+        "plan": plan,
+        "source_type": source_type,
+        "type_mismatch": bool(source_type and source_type != card["type"]),
+        **result,
+    }
 
 
 @app.websocket("/ws/status")

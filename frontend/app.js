@@ -27,9 +27,11 @@ function mifareApp() {
     writeMode: "text",
     writeText: "",
     writeHex: "",
+    writeCardId: "",
     writeStart: 1,
     writeKeys: "",
     writePlan: null,
+    writeTypeInfo: null,
     writeResults: null,
     writeConfirm: false,
     writeError: "",
@@ -335,13 +337,23 @@ function mifareApp() {
       return this.showEqual ? sector.blocks : sector.blocks.filter((block) => block.status !== "same");
     },
 
+    openWrite() {
+      this.tab = "write";
+      this.loadSavedCards();
+    },
+
     writePayload() {
+      const keys = this.parseKeyText(this.writeKeys);
+      if (this.writeMode === "card") {
+        if (!this.writeCardId) throw new Error("Elige la copia guardada que quieres escribir");
+        return { mode: "card", card_id: this.writeCardId, start_block: 1, keys };
+      }
       return {
         mode: this.writeMode,
         text: this.writeText,
         hex: this.writeHex,
         start_block: Number(this.writeStart) || 0,
-        keys: this.parseKeyText(this.writeKeys),
+        keys,
       };
     },
 
@@ -350,14 +362,17 @@ function mifareApp() {
       this.writeResults = null;
       this.writeConfirm = false;
       try {
+        const payload = this.writePayload();
         const body = await this.requestJson("/api/write", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...this.writePayload(), dry_run: true }),
+          body: JSON.stringify({ ...payload, dry_run: true }),
         });
         this.writePlan = body.plan;
+        this.writeTypeInfo = { type: body.type, sourceType: body.source_type, mismatch: body.type_mismatch };
       } catch (error) {
         this.writePlan = null;
+        this.writeTypeInfo = null;
         this.writeError = error.message;
       }
     },
@@ -366,12 +381,14 @@ function mifareApp() {
       this.writeError = "";
       this.writing = true;
       try {
+        const payload = this.writePayload();
         this.writeResults = await this.requestJson("/api/write", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...this.writePayload(), dry_run: false }),
+          body: JSON.stringify({ ...payload, dry_run: false }),
         });
         this.writePlan = null;
+        this.writeTypeInfo = null;
         this.writeConfirm = false;
       } catch (error) {
         this.writeError = error.message;
