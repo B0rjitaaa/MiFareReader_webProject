@@ -21,6 +21,7 @@
     <nav class="tabs">
       <button type="button" :class="{ active: tab === 'reader' }" @click="tab = 'reader'">Lector</button>
       <button type="button" :class="{ active: tab === 'compare' }" @click="tab = 'compare'">Comparar</button>
+      <button type="button" :class="{ active: tab === 'write' }" @click="tab = 'write'">Escribir</button>
     </nav>
 
     <div x-show="tab === 'reader'">
@@ -196,6 +197,87 @@
               </article>
             </template>
           </div>
+        </section>
+      </template>
+    </div>
+
+    <div x-show="tab === 'write'">
+      <section class="panel write-panel">
+        <h2>Escribir contenido en una tarjeta</h2>
+        <p class="warn">Escribe solo en <strong>bloques de datos</strong> de tarjetas tuyas. El bloque 0 y los trailer (UID y claves) estan protegidos y no se tocan. Antes de escribir se guarda una copia del contenido actual.</p>
+
+        <div class="card-info">
+          <template x-if="status.card">
+            <p class="label"><span x-text="status.card.type"></span> · UID <span x-text="status.card.uid"></span></p>
+          </template>
+          <template x-if="!status.card">
+            <p class="hint">Acerca al lector la tarjeta en la que quieres escribir.</p>
+          </template>
+        </div>
+
+        <fieldset class="write-mode">
+          <legend class="visually-hidden">Tipo de contenido</legend>
+          <label><input type="radio" name="writeMode" value="text" x-model="writeMode" @change="writePlan = null"> Texto</label>
+          <label><input type="radio" name="writeMode" value="hex" x-model="writeMode" @change="writePlan = null"> Bytes (hex)</label>
+        </fieldset>
+
+        <div class="write-fields">
+          <label class="field">
+            <span x-text="writeMode === 'text' ? 'Texto (se divide en bloques de 16 bytes)' : 'Un bloque: 16 bytes en hexadecimal (32 digitos)'"></span>
+            <textarea x-show="writeMode === 'text'" rows="3" x-model="writeText" @input="writePlan = null"></textarea>
+            <input x-show="writeMode === 'hex'" type="text" class="hex-input" maxlength="47" placeholder="00 11 22 ... (16 bytes)" x-model="writeHex" @input="writePlan = null">
+          </label>
+          <label class="field start">
+            <span>Bloque inicial</span>
+            <input type="number" min="1" max="255" x-model.number="writeStart" @input="writePlan = null">
+          </label>
+        </div>
+
+        <details>
+          <summary>Claves adicionales</summary>
+          <label for="write-keys">Una por linea, 12 caracteres hexadecimales. Se prueban antes que las de fabrica.</label>
+          <textarea id="write-keys" rows="2" spellcheck="false" autocomplete="off" x-model="writeKeys"></textarea>
+        </details>
+
+        <div class="write-actions">
+          <button type="button" class="secondary" @click="previewWrite()" :disabled="writing">Previsualizar</button>
+        </div>
+        <p class="error" role="alert" x-show="writeError" x-text="writeError"></p>
+      </section>
+
+      <template x-if="writePlan">
+        <section class="panel">
+          <h2>Se va a escribir esto</h2>
+          <ol class="write-preview">
+            <template x-for="row in writePlan" :key="row.block">
+              <li>
+                <span class="block-number" x-text="`Bloque ${row.block}`"></span>
+                <code x-text="row.data"></code>
+                <span class="ascii" x-text="row.ascii"></span>
+              </li>
+            </template>
+          </ol>
+          <label class="confirm"><input type="checkbox" x-model="writeConfirm"> He revisado los datos y la tarjeta es mia</label>
+          <div class="write-actions">
+            <button type="button" @click="doWrite()" :disabled="!writeConfirm || writing"
+                    x-text="writing ? 'Escribiendo...' : 'Escribir en la tarjeta'"></button>
+          </div>
+        </section>
+      </template>
+
+      <template x-if="writeResults">
+        <section class="panel">
+          <h2 x-text="writeResults.results.every(r => r.verified) ? 'Escritura verificada' : 'Hubo bloques que no se pudieron verificar'"></h2>
+          <p class="hint">Copia de seguridad previa guardada en el Mint: <code x-text="writeResults.backup_file"></code></p>
+          <ol class="write-preview">
+            <template x-for="row in writeResults.results" :key="row.block">
+              <li :class="row.verified ? 'ok' : 'bad'">
+                <span class="block-number" x-text="`Bloque ${row.block}`"></span>
+                <code x-text="row.written || 'sin leer'"></code>
+                <span class="kind" x-text="row.verified ? 'verificado' : 'sin verificar'"></span>
+              </li>
+            </template>
+          </ol>
         </section>
       </template>
     </div>

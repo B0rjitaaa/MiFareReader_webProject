@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 CARDS_DIR = Path("/data/cards")
+BACKUPS_DIR = Path("/data/backups")
 CARD_ID = re.compile(r"^[A-Za-z0-9-]+$")
 
 
@@ -100,3 +101,22 @@ def rename_card(card_id: str, new_name: str) -> dict | None:
         json.dump(card, file, indent=2, ensure_ascii=False)
     os.replace(temporary, path)
     return _summary(card_id, card)
+
+
+def save_backup(uid: str | None, card_type: str, blocks: list[dict]) -> str:
+    """Guarda el contenido previo de los bloques antes de escribir, por si hay que revertir."""
+    BACKUPS_DIR.mkdir(mode=0o700, exist_ok=True)
+    uid_slug = (uid or "sin-uid").replace(" ", "")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    name = f"{timestamp}-{uid_slug}.json"
+    path = BACKUPS_DIR / name
+    payload = {
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+        "uid": uid,
+        "type": card_type,
+        "blocks": blocks,
+    }
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w") as file:
+        json.dump(payload, file, indent=2, ensure_ascii=False)
+    return f"/data/backups/{name}"

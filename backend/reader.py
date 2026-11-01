@@ -5,6 +5,8 @@ from smartcard.Exceptions import CardConnectionException, NoCardException, Smart
 from smartcard.System import readers
 from smartcard.util import toBytes, toHexString
 
+from backend import storage
+
 GET_UID = [0xFF, 0xCA, 0x00, 0x00, 0x00]
 SW_OK = (0x90, 0x00)
 KEY_TYPES = {"A": 0x60, "B": 0x61}
@@ -153,3 +155,113 @@ def read_card(extra_keys: list[str]) -> dict:
         "type": card_type,
         "sectors": sectors,
     }
+
+
+def to_hex(data: list[int]) -> str:
+    return toHexString(data)
+
+
+def to_ascii(data: list[int]) -> str:
+    return "".join(chr(b) if 32 <= b < 127 else "\u00b7" for b in data)
+
+
+def _sector_first_block(block: int, layout: list[tuple[int, int]]) -> int:
+    for first_block, block_count in layout:
+        if first_block <= block < first_block + block_count:
+            return first_block
+    return block
+
+
+def writable_blocks(card_type: str) -> list[int]:
+    """Bloques de datos: ni el bloque 0 (fabricante) ni los trailer (claves)."""
+    layout = SECTOR_LAYOUTS.get(card_type)
+    if layout is None:
+        return []
+    blocks = []
+    for first_block, block_count in layout:
+        for block in range(first_block, first_block + block_count):
+            if _block_kind(block, first_block, block_count) == "data":
+                blocks.append(block)
+    return blocks
+
+
+def plan_frames(mode: str, payload: str, start_block: int, card_type: str) -> list[tuple[int, list[int]]]:
+    """Convierte el contenido del usuario en (bloque, 16 bytes). No toca el hardware."""
+    allowed = writable_blocks(card_type)
+    if not allowed:
+        raise CardError(f"Tipo de tarjeta no compatible para escritura: {card_type}")
+    if start_block not in allowed:
+        raise CardError(f"El bloque {start_block} no es de datos. El bloque 0 y los trailer estan protegidos.")
+    if mode == "hex":
+        tokens = payload.replace(" ", "")
+        if len(tokens) != 32 or any(c not in "0123456789abcdefABCDEF" for c in tokens):
+            raise CardError("Introduce exactamente 16 bytes en hexadecimal (32 digitos).")
+        data = [int(tokens[i:i + 2], 16) for i in range(0, 32, 2)]
+        return [(start_block, data)]
+    raw = payload.encode("utf-8")
+    if not raw:
+        raise CardError("Escribe algun contenido.")
+    chunks = [list(raw[i:i + 16]) for i in range(0, len(raw), 16)]
+    chunks[-1] = chunks[-1] + [0] * (16 - len(chunks[-1]))
+    targets = [block for block in allowed if block >= start_block]
+    if len(chunks) > len(targets):
+        raise CardError(
+            f"El texto ocupa {len(chunks)} bloques y desde el {start_block} solo quedan "
+            f"{len(targets)} bloques de datos."
+        )
+    return list(zip(targets, chunks))
+
+
+def _write_block(connection, block: int, data: list[int]) -> bool:
+    _, sw1, sw2 = connection.transmit([0xFF, 0xD6, 0x00, block, 0x10] + data)
+    return (sw1, sw2) == SW_OK
+
+
+def write_blocks(frames: list[tuple[int, list[int]]], extra_keys: list[str]) -> dict:
+    """Escribe en bloques de datos. Copia de seguridad antes y verificacion despues. Nunca toca bloque 0 ni trailer."""
+    keys = list(dict.fromkeys([key.upper() for key in extra_keys] + DEFAULT_KEYS))
+    with _lock:
+        try:
+            found = readers()
+            if not found:
+                raise CardError("No hay ningun lector conectado")
+            connection = found[0].createConnection()
+            try:
+                connection.connect()
+                card_type = _card_type(connection.getATR())
+                layout = SECTOR_LAYOUTS.get(card_type)
+                if layout is None:
+                    raise CardError(f"Tipo de tarjeta no compatible para escritura: {card_type}")
+                allowed = set(writable_blocks(card_type))
+                for block, data in frames:
+                    if block not in allowed:
+                        raise CardError(f"El bloque {block} esta protegido y no se puede escribir.")
+                    if len(data) != 16:
+                        raise CardError(f"El bloque {block} no tiene 16 bytes.")
+                uid_data, sw1, sw2 = connection.transmit(GET_UID)
+                uid = toHexString(uid_data) if (sw1, sw2) == SW_OK else None
+
+                backup = []
+                for block, _data in frames:
+                    if not _find_key(connection, _sector_first_block(block, layout), keys):
+                        raise CardError(f"No hay clave valida para el sector del bloque {block}. Anade la clave correcta.")
+                    backup.append({"block": block, "data": _read_block(connection, block)})
+                backup_file = storage.save_backup(uid, card_type, backup)
+
+                results = []
+                for block, data in frames:
+                    _find_key(connection, _sector_first_block(block, layout), keys)
+                    ok = _write_block(connection, block, data)
+                    after = _read_block(connection, block)
+                    results.append({
+                        "block": block,
+                        "written": after,
+                        "verified": bool(ok and after == toHexString(data)),
+                    })
+            finally:
+                connection.release()
+        except NoCardException as error:
+            raise CardError("No hay ninguna tarjeta en el lector") from error
+        except SmartcardException as error:
+            raise CardError("Se perdio la tarjeta durante la escritura. Dejala quieta y repite.") from error
+    return {"type": card_type, "uid": uid, "backup_file": backup_file, "results": results}

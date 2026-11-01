@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
@@ -34,6 +34,15 @@ class SaveRequest(BaseModel):
 
 class RenameRequest(BaseModel):
     name: CardName
+
+
+class WriteRequest(BaseModel):
+    mode: Literal["text", "hex"]
+    text: str = Field(default="", max_length=4096)
+    hex: str = Field(default="", max_length=64)
+    start_block: int = Field(ge=1, le=255)
+    keys: list[HexKey] = Field(default=[], max_length=16)
+    dry_run: bool = True
 
 
 async def monitor_reader() -> None:
@@ -124,6 +133,32 @@ def rename_card(card_id: str, request: RenameRequest) -> dict:
     if summary is None:
         raise HTTPException(status_code=404, detail="Tarjeta no encontrada")
     return summary
+
+
+@app.post("/api/write")
+async def write_card(request: WriteRequest) -> dict:
+    status = await asyncio.to_thread(reader.status)
+    card = status.get("card")
+    if not card or not card.get("type"):
+        raise HTTPException(status_code=409, detail="No hay ninguna tarjeta en el lector")
+    payload = request.text if request.mode == "text" else request.hex
+    if not payload.strip():
+        raise HTTPException(status_code=422, detail="Escribe algun contenido")
+    try:
+        frames = reader.plan_frames(request.mode, payload, request.start_block, card["type"])
+    except reader.CardError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    plan = [
+        {"block": block, "data": reader.to_hex(data), "ascii": reader.to_ascii(data)}
+        for block, data in frames
+    ]
+    if request.dry_run:
+        return {"type": card["type"], "dry_run": True, "plan": plan}
+    try:
+        result = await asyncio.to_thread(reader.write_blocks, frames, request.keys)
+    except reader.CardError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"dry_run": False, "plan": plan, **result}
 
 
 @app.websocket("/ws/status")

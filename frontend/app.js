@@ -23,6 +23,16 @@ function mifareApp() {
     compareError: "",
     showEqual: false,
     diffResult: null,
+    writeMode: "text",
+    writeText: "",
+    writeHex: "",
+    writeStart: 1,
+    writeKeys: "",
+    writePlan: null,
+    writeResults: null,
+    writeConfirm: false,
+    writeError: "",
+    writing: false,
     kindLabels: { manufacturer: "Fabricante", data: "Datos", trailer: "Trailer" },
 
     connect() {
@@ -42,11 +52,15 @@ function mifareApp() {
       };
     },
 
-    parseKeys() {
-      const keys = this.keysText.split(/[\s,]+/).filter(Boolean);
+    parseKeyText(text) {
+      const keys = text.split(/[\s,]+/).filter(Boolean);
       const invalid = keys.find((key) => !/^[0-9A-Fa-f]{12}$/.test(key));
       if (invalid) throw new Error(`Clave no válida: ${invalid}`);
       return keys;
+    },
+
+    parseKeys() {
+      return this.parseKeyText(this.keysText);
     },
 
     async read() {
@@ -273,6 +287,51 @@ function mifareApp() {
 
     visibleBlocks(sector) {
       return this.showEqual ? sector.blocks : sector.blocks.filter((block) => block.status !== "same");
+    },
+
+    writePayload() {
+      return {
+        mode: this.writeMode,
+        text: this.writeText,
+        hex: this.writeHex,
+        start_block: Number(this.writeStart) || 0,
+        keys: this.parseKeyText(this.writeKeys),
+      };
+    },
+
+    async previewWrite() {
+      this.writeError = "";
+      this.writeResults = null;
+      this.writeConfirm = false;
+      try {
+        const body = await this.requestJson("/api/write", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...this.writePayload(), dry_run: true }),
+        });
+        this.writePlan = body.plan;
+      } catch (error) {
+        this.writePlan = null;
+        this.writeError = error.message;
+      }
+    },
+
+    async doWrite() {
+      this.writeError = "";
+      this.writing = true;
+      try {
+        this.writeResults = await this.requestJson("/api/write", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...this.writePayload(), dry_run: false }),
+        });
+        this.writePlan = null;
+        this.writeConfirm = false;
+      } catch (error) {
+        this.writeError = error.message;
+      } finally {
+        this.writing = false;
+      }
     },
   };
 }
