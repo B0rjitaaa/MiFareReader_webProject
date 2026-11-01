@@ -18,6 +18,13 @@
       </p>
     </header>
 
+    <nav class="tabs">
+      <button type="button" :class="{ active: tab === 'reader' }" @click="tab = 'reader'">Lector</button>
+      <button type="button" :class="{ active: tab === 'compare' }" @click="tab = 'compare'">Comparar</button>
+    </nav>
+
+    <div x-show="tab === 'reader'">
+
     <section class="panel">
       <div class="card-info" aria-live="polite">
         <template x-if="status.card">
@@ -126,6 +133,72 @@
         </template>
       </ul>
     </section>
+    </div>
+
+    <div x-show="tab === 'compare'">
+      <section class="panel">
+        <h2>Comparar dos tarjetas</h2>
+        <p class="hint" x-show="!savedCards.length">Guarda alguna tarjeta en el Mint para poder compararla.</p>
+        <div class="compare-pickers">
+          <label>
+            <span>Izquierda</span>
+            <select x-model="leftId" @change="loadSide('left')">
+              <option value="">— elige una tarjeta —</option>
+              <template x-for="card in savedCards" :key="card.id">
+                <option :value="card.id" x-text="`${card.name} · ${card.uid}`"></option>
+              </template>
+            </select>
+          </label>
+          <label>
+            <span>Derecha</span>
+            <select x-model="rightId" @change="loadSide('right')">
+              <option value="">— elige una tarjeta —</option>
+              <template x-for="card in savedCards" :key="card.id">
+                <option :value="card.id" x-text="`${card.name} · ${card.uid}`"></option>
+              </template>
+            </select>
+          </label>
+        </div>
+        <p class="error" role="alert" x-show="compareError" x-text="compareError"></p>
+      </section>
+
+      <template x-if="diffResult">
+        <section>
+          <div class="summary">
+            <h2 x-text="diffResult.changed === 0 ? 'Idénticas en lo que se puede leer' : `${diffResult.changed} de ${diffResult.compared} bloques cambian`"></h2>
+            <p class="hint">
+              <span x-show="diffResult.uidDiffers">El UID es distinto entre las dos. </span>
+              <label class="toggle"><input type="checkbox" x-model="showEqual"> Mostrar también los bloques iguales</label>
+            </p>
+            <p class="legend"><span>◀ izquierda</span> · <span>derecha ▶</span> · los bytes resaltados son los que cambian.</p>
+          </div>
+
+          <div class="sectors">
+            <template x-for="sector in visibleSectors()" :key="sector.sector">
+              <article class="sector" :class="{ changed: sector.changed }">
+                <h3>
+                  <span x-text="`Sector ${sector.sector}`"></span>
+                  <small x-text="sector.changed ? 'cambia' : 'sin cambios'"></small>
+                </h3>
+                <ol class="diff-list">
+                  <template x-for="block in visibleBlocks(sector)" :key="block.block">
+                    <li :class="block.status">
+                      <span class="block-number" x-text="block.block"></span>
+                      <div class="diff" x-show="block.status !== 'unreadable'">
+                        <code class="side left"><template x-for="(b, i) in block.bytes" :key="i"><span :class="{ hot: b.diff }" x-text="b.l + ' '"></span></template></code>
+                        <code class="side right"><template x-for="(b, i) in block.bytes" :key="i"><span :class="{ hot: b.diff }" x-text="b.r + ' '"></span></template></code>
+                      </div>
+                      <span class="unreadable-note" x-show="block.status === 'unreadable'">No se pudo leer en una de las dos</span>
+                      <span class="kind" x-text="kindLabels[block.kind]"></span>
+                    </li>
+                  </template>
+                </ol>
+              </article>
+            </template>
+          </div>
+        </section>
+      </template>
+    </div>
   </main>
 </body>
 </html>

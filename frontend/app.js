@@ -15,6 +15,14 @@ function mifareApp() {
     savedCards: [],
     editingId: null,
     editName: "",
+    tab: "reader",
+    leftId: "",
+    rightId: "",
+    leftCard: null,
+    rightCard: null,
+    compareError: "",
+    showEqual: false,
+    diffResult: null,
     kindLabels: { manufacturer: "Fabricante", data: "Datos", trailer: "Trailer" },
 
     connect() {
@@ -113,6 +121,7 @@ function mifareApp() {
       try {
         this.result = await this.requestJson(`/api/cards/${card.id}`);
         this.viewingName = card.name;
+        this.tab = "reader";
         window.scrollTo({ top: 0 });
       } catch (error) {
         this.error = error.message;
@@ -180,6 +189,90 @@ function mifareApp() {
         const code = parseInt(byte, 16);
         return code >= 32 && code < 127 ? String.fromCharCode(code) : "·";
       }).join("");
+    },
+
+    async loadSide(side) {
+      this.compareError = "";
+      const id = side === "left" ? this.leftId : this.rightId;
+      if (!id) {
+        if (side === "left") this.leftCard = null; else this.rightCard = null;
+        this.computeDiff();
+        return;
+      }
+      try {
+        const card = await this.requestJson(`/api/cards/${id}`);
+        if (side === "left") this.leftCard = card; else this.rightCard = card;
+        this.computeDiff();
+      } catch (error) {
+        this.compareError = error.message;
+      }
+    },
+
+    computeDiff() {
+      if (!this.leftCard || !this.rightCard) { this.diffResult = null; return; }
+      const index = (card) => {
+        const map = new Map();
+        (card.sectors || []).forEach((sector) =>
+          (sector.blocks || []).forEach((block) =>
+            map.set(block.block, { sector: sector.sector, kind: block.kind, data: block.data })));
+        return map;
+      };
+      const left = index(this.leftCard);
+      const right = index(this.rightCard);
+      const numbers = [...new Set([...left.keys(), ...right.keys()])].sort((a, b) => a - b);
+      const sectors = new Map();
+      let changed = 0;
+      let compared = 0;
+      for (const number of numbers) {
+        const l = left.get(number);
+        const r = right.get(number);
+        const sector = l?.sector ?? r?.sector;
+        const kind = l?.kind ?? r?.kind;
+        const ld = l?.data ?? null;
+        const rd = r?.data ?? null;
+        let status;
+        const bytes = [];
+        if (ld === null || rd === null) {
+          status = "unreadable";
+        } else {
+          compared += 1;
+          const lb = ld.split(" ");
+          const rb = rd.split(" ");
+          const length = Math.max(lb.length, rb.length);
+          let differs = false;
+          for (let i = 0; i < length; i += 1) {
+            const a = lb[i] ?? "··";
+            const b = rb[i] ?? "··";
+            const diff = a !== b;
+            if (diff) differs = true;
+            bytes.push({ l: a, r: b, diff });
+          }
+          status = differs ? "changed" : "same";
+          if (differs) changed += 1;
+        }
+        if (!sectors.has(sector)) sectors.set(sector, []);
+        sectors.get(sector).push({ block: number, kind, left: ld, right: rd, status, bytes });
+      }
+      this.diffResult = {
+        sectors: [...sectors.entries()].sort((a, b) => a[0] - b[0]).map(([sector, blocks]) => ({
+          sector,
+          blocks,
+          changed: blocks.some((block) => block.status === "changed"),
+        })),
+        changed,
+        compared,
+        uidDiffers: (this.leftCard.uid || "") !== (this.rightCard.uid || ""),
+      };
+    },
+
+    visibleSectors() {
+      if (!this.diffResult) return [];
+      return this.diffResult.sectors.filter((sector) =>
+        this.showEqual || sector.blocks.some((block) => block.status !== "same"));
+    },
+
+    visibleBlocks(sector) {
+      return this.showEqual ? sector.blocks : sector.blocks.filter((block) => block.status !== "same");
     },
   };
 }
