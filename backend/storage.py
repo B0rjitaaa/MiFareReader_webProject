@@ -99,6 +99,19 @@ def list_cards() -> list[dict]:
     return sorted(cards, key=lambda card: card["read_at"], reverse=True)
 
 
+def delete_card(card_id: str) -> bool:
+    if not CARD_ID.match(card_id):
+        return False
+    path = CARDS_DIR / f"{card_id}.json"
+    if not path.is_file():
+        return False
+    path.unlink()
+    dump_path = CARDS_DIR / f"{card_id}.bin"
+    if dump_path.is_file():
+        dump_path.unlink()
+    return True
+
+
 def load_card(card_id: str) -> dict | None:
     if not CARD_ID.match(card_id):
         return None

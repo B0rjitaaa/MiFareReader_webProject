@@ -15,6 +15,7 @@ function mifareApp() {
     savedCards: [],
     editingId: null,
     editName: "",
+    deletingId: null,
     tab: "reader",
     leftId: "",
     rightId: "",
@@ -189,6 +190,35 @@ function mifareApp() {
     cancelRename() {
       this.editingId = null;
       this.editName = "";
+    },
+
+    askDelete(card) {
+      this.deletingId = card.id;
+      this.editingId = null;
+      this.error = "";
+    },
+
+    cancelDelete() {
+      this.deletingId = null;
+    },
+
+    async confirmDelete(card) {
+      this.error = "";
+      try {
+        const response = await fetch(`/api/cards/${card.id}`, { method: "DELETE" });
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.detail || "No se pudo borrar");
+        }
+        this.deletingId = null;
+        if (this.viewingName === card.name) {
+          this.result = null;
+          this.viewingName = "";
+        }
+        await this.loadSavedCards();
+      } catch (error) {
+        this.error = error.message;
+      }
     },
 
     async confirmRename(card) {

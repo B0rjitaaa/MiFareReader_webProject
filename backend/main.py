@@ -136,6 +136,13 @@ def get_card_dump(card_id: str) -> Response:
     )
 
 
+@app.delete("/api/cards/{card_id}", status_code=204)
+def delete_card(card_id: str) -> Response:
+    if not storage.delete_card(card_id):
+        raise HTTPException(status_code=404, detail="Tarjeta no encontrada")
+    return Response(status_code=204)
+
+
 @app.patch("/api/cards/{card_id}")
 def rename_card(card_id: str, request: RenameRequest) -> dict:
     try:
