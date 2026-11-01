@@ -225,20 +225,12 @@
 
         <fieldset class="write-mode">
           <legend class="visually-hidden">Tipo de contenido</legend>
-
-
           <label><input type="radio" name="writeMode" value="text" x-model="writeMode" @change="writePlan = null; writeResults = null"> Texto</label>
           <label><input type="radio" name="writeMode" value="hex" x-model="writeMode" @change="writePlan = null; writeResults = null"> Bytes (hex)</label>
           <label><input type="radio" name="writeMode" value="card" x-model="writeMode" @change="writePlan = null; writeResults = null"> Desde copia guardada</label>
         </fieldset>
 
         <div class="write-fields">
-
-
-
-
-
-
           <template x-if="writeMode === 'card'">
             <label class="field">
               <span>Copia guardada en el Mint</span>
