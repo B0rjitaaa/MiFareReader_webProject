@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
@@ -8,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, StringConstraints
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from backend import reader
+from backend import reader, storage
 
 POLL_SECONDS = 0.5
 ALLOWED_HOSTS = ["localhost", "127.0.0.1", "192.168.178.104", "pcmint-optiplex-3020m.fritz.box"]
@@ -16,12 +17,23 @@ ALLOWED_ORIGINS = {f"http://{host}:8122" for host in ALLOWED_HOSTS}
 
 clients: set[WebSocket] = set()
 current_status: dict = {"reader": None, "card": None}
+last_reading: dict | None = None
 
 HexKey = Annotated[str, StringConstraints(pattern=r"^[0-9A-Fa-f]{12}$")]
+CardName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
 
 
 class ReadRequest(BaseModel):
     keys: list[HexKey] = Field(default=[], max_length=16)
+
+
+class SaveRequest(BaseModel):
+    name: CardName
+    uid: str | None
+
+
+class RenameRequest(BaseModel):
+    name: CardName
 
 
 async def monitor_reader() -> None:
@@ -68,10 +80,50 @@ async def get_status() -> dict:
 
 @app.post("/api/read")
 async def read_card(request: ReadRequest) -> dict:
+    global last_reading
     try:
-        return await asyncio.to_thread(reader.read_card, request.keys)
+        reading = await asyncio.to_thread(reader.read_card, request.keys)
     except reader.CardError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+    last_reading = {**reading, "read_at": datetime.now(timezone.utc).isoformat()}
+    return last_reading
+
+
+@app.get("/api/cards")
+def list_cards() -> list[dict]:
+    return storage.list_cards()
+
+
+@app.post("/api/cards", status_code=201)
+def save_card(request: SaveRequest) -> dict:
+    # Solo se guarda una lectura hecha por el servidor, nunca datos enviados por el cliente
+    if last_reading is None or last_reading["uid"] != request.uid:
+        raise HTTPException(status_code=409, detail="Esa lectura ya no está disponible. Lee la tarjeta de nuevo.")
+    try:
+        return storage.save_card(request.name, last_reading)
+    except storage.NameTaken as error:
+        raise HTTPException(status_code=409, detail="Ya hay una tarjeta con ese nombre. Elige otro.") from error
+    except FileExistsError as error:
+        raise HTTPException(status_code=409, detail="Ya existe esa tarjeta. Espera un segundo y repite.") from error
+
+
+@app.get("/api/cards/{card_id}")
+def get_card(card_id: str) -> dict:
+    card = storage.load_card(card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail="Tarjeta no encontrada")
+    return card
+
+
+@app.patch("/api/cards/{card_id}")
+def rename_card(card_id: str, request: RenameRequest) -> dict:
+    try:
+        summary = storage.rename_card(card_id, request.name)
+    except storage.NameTaken as error:
+        raise HTTPException(status_code=409, detail="Ya hay una tarjeta con ese nombre. Elige otro.") from error
+    if summary is None:
+        raise HTTPException(status_code=404, detail="Tarjeta no encontrada")
+    return summary
 
 
 @app.websocket("/ws/status")

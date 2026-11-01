@@ -95,6 +95,56 @@ code, .ascii { font-family: var(--mono); }
 .ascii { color: var(--muted); white-space: pre; }
 .kind { color: var(--muted); text-align: right; font-size: .75rem; }
 
+button.secondary {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-weight: 500;
+}
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+.save { margin-bottom: 18px; }
+.save fieldset { display: grid; gap: 8px; margin: 12px 0 14px; padding: 0; border: 0; }
+.save fieldset label { cursor: pointer; }
+.save small { display: inline-block; margin-left: 4px; color: var(--muted); font-size: .85rem; }
+.save-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin-bottom: 10px; }
+.save-row > div { flex: 1 1 240px; max-width: 420px; }
+.save-row label { display: block; margin-bottom: 4px; color: var(--muted); font-size: .88rem; }
+input[type="text"] {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+.saved-ok { margin-top: 8px; color: var(--ok); font-weight: 600; }
+
+.saved { margin-top: 32px; }
+.saved h2 { margin-bottom: 10px; }
+.saved ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.saved-card {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 1rem;
+}
+.saved-card strong { overflow-wrap: anywhere; }
+.saved-main { flex: 1 1 260px; }
+.rename { width: 100%; max-width: 420px; min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
 @media (max-width: 640px) {
   li { grid-template-columns: 2.5ch 1fr; }
   .ascii, .kind { grid-column: 2; text-align: left; }

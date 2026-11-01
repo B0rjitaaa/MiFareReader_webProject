@@ -48,12 +48,34 @@
     <template x-if="result">
       <section>
         <div class="summary">
-          <h2 x-text="`${readableSectors()} de ${result.sectors.length} sectores leídos`"></h2>
+          <h2 x-text="viewingName || `${readableSectors()} de ${result.sectors.length} sectores leídos`"></h2>
           <p class="hint">
+            <span x-show="viewingName" x-text="`${readableSectors()} de ${result.sectors.length} sectores, leída el ${formatDate(result.read_at)}.`"></span>
             <span x-text="`UID ${result.uid}`"></span>.
             En los bloques trailer, la clave A siempre aparece como ceros porque la tarjeta no la revela.
           </p>
         </div>
+
+        <form class="panel save" x-show="!viewingName" @submit.prevent="save()">
+          <h2>¿Dónde quieres guardar esta lectura?</h2>
+          <fieldset>
+            <legend class="visually-hidden">Destino</legend>
+            <label><input type="radio" name="destination" value="mint" x-model="destination"> En el Mint <small>en la carpeta data/cards, que nunca se sube al repo</small></label>
+            <label><input type="radio" name="destination" value="local" x-model="destination"> En este equipo <small>se descarga como archivo JSON desde el navegador</small></label>
+          </fieldset>
+          <div class="save-row">
+            <div>
+              <label for="card-name">Nombre</label>
+              <input id="card-name" type="text" maxlength="80" autocomplete="off" x-model="cardName">
+            </div>
+            <button type="submit" :disabled="!destination || !cardName.trim() || saving"
+                    x-text="saving ? 'Guardando…' : 'Guardar'"></button>
+          </div>
+          <p class="hint">El archivo incluye las claves que han funcionado en cada sector.</p>
+          <p class="error" role="alert" x-show="saveError" x-text="saveError"></p>
+          <p class="saved-ok" role="status" x-show="saveMessage" x-text="saveMessage"></p>
+        </form>
+
         <div class="sectors">
           <template x-for="sector in result.sectors" :key="sector.sector">
             <article class="sector" :class="{ locked: !sector.key }">
@@ -78,6 +100,32 @@
         </div>
       </section>
     </template>
+
+    <section class="saved">
+      <h2>Tarjetas guardadas en el Mint</h2>
+      <p class="hint" x-show="!savedCards.length">Todavía no hay ninguna.</p>
+      <ul x-show="savedCards.length">
+        <template x-for="card in savedCards" :key="card.id">
+          <li class="saved-card">
+            <div class="saved-main">
+              <strong x-show="editingId !== card.id" x-text="card.name"></strong>
+              <input class="rename" type="text" maxlength="80" autocomplete="off" x-show="editingId === card.id"
+                     x-model="editName" @keydown.enter.prevent="confirmRename(card)" @keydown.escape="cancelRename()">
+              <p class="hint" x-text="`${card.type} · UID ${card.uid} · ${card.sectors_read} de ${card.sectors_total} sectores · ${formatDate(card.read_at)}`"></p>
+            </div>
+            <div class="actions" x-show="editingId !== card.id">
+              <button type="button" class="secondary" @click="startRename(card)">Renombrar</button>
+              <button type="button" class="secondary" @click="view(card)">Ver</button>
+              <button type="button" class="secondary" @click="downloadSaved(card)">Descargar</button>
+            </div>
+            <div class="actions" x-show="editingId === card.id">
+              <button type="button" class="secondary" @click="confirmRename(card)">Guardar</button>
+              <button type="button" class="secondary" @click="cancelRename()">Cancelar</button>
+            </div>
+          </li>
+        </template>
+      </ul>
+    </section>
   </main>
 </body>
 </html>
