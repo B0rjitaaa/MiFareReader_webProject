@@ -11,8 +11,8 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from backend import reader
 
 POLL_SECONDS = 0.5
-ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
-ALLOWED_ORIGINS = {"http://localhost:8122", "http://127.0.0.1:8122"}
+ALLOWED_HOSTS = ["localhost", "127.0.0.1", "192.168.178.104", "pcmint-optiplex-3020m.fritz.box"]
+ALLOWED_ORIGINS = {f"http://{host}:8122" for host in ALLOWED_HOSTS}
 
 clients: set[WebSocket] = set()
 current_status: dict = {"reader": None, "card": None}
